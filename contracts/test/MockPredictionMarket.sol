@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@uma/core/contracts/common/implementation/ExpandedERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ExpandedERC20} from "@uma/core/contracts/common/implementation/ExpandedERC20.sol";
 
 /// @dev TEST ONLY. The parts of EventBasedPredictionMarket the AMM depends on, without the
 ///      UMA oracle infrastructure: collateral-backed Long/Short pairs that mint and redeem 1:1,
 ///      and a settlement flag the test can flip. Behaviour mirrors the real contract's
 ///      create(), redeem() and settle().
 contract MockPredictionMarket {
-    using SafeERC20 for ExpandedERC20;
+    using SafeERC20 for IERC20;
 
     ExpandedERC20 public collateralToken;
     ExpandedERC20 public longToken;
@@ -30,7 +31,7 @@ contract MockPredictionMarket {
 
     function create(uint256 tokensToCreate) external {
         require(priceRequested, "Price not requested");
-        collateralToken.safeTransferFrom(msg.sender, address(this), tokensToCreate);
+        IERC20(address(collateralToken)).safeTransferFrom(msg.sender, address(this), tokensToCreate);
         require(longToken.mint(msg.sender, tokensToCreate));
         require(shortToken.mint(msg.sender, tokensToCreate));
     }
@@ -38,7 +39,7 @@ contract MockPredictionMarket {
     function redeem(uint256 tokensToRedeem) external {
         require(longToken.burnFrom(msg.sender, tokensToRedeem));
         require(shortToken.burnFrom(msg.sender, tokensToRedeem));
-        collateralToken.safeTransfer(msg.sender, tokensToRedeem);
+        IERC20(address(collateralToken)).safeTransfer(msg.sender, tokensToRedeem);
     }
 
     function resolve(uint256 price) external {
@@ -51,6 +52,6 @@ contract MockPredictionMarket {
         require(longToken.burnFrom(msg.sender, longIn));
         require(shortToken.burnFrom(msg.sender, shortIn));
         out = (longIn * settlementPrice) / 1e18 + (shortIn * (1e18 - settlementPrice)) / 1e18;
-        collateralToken.safeTransfer(msg.sender, out);
+        IERC20(address(collateralToken)).safeTransfer(msg.sender, out);
     }
 }

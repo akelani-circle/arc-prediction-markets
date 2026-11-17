@@ -22,7 +22,7 @@ import hardhatVerify from "@nomicfoundation/hardhat-verify";
 import hardhatNodeTestRunner from "@nomicfoundation/hardhat-node-test-runner";
 import * as dotenv from "dotenv";
 
-dotenv.config({ path: ".env.local" });
+dotenv.config({ path: ".env.local", quiet: true });
 
 const accounts: string[] = (() => {
   let key = process.env.PRIVATE_KEY?.trim();
@@ -35,7 +35,7 @@ const accounts: string[] = (() => {
 export default defineConfig({
   plugins: [hardhatEthers, hardhatVerify, hardhatNodeTestRunner],
   solidity: {
-    version: "0.8.17",
+    version: "0.8.20",
     settings: {
       optimizer: {
         enabled: true,

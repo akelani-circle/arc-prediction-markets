@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/math/Math.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import "@uma/core/contracts/common/implementation/ExpandedERC20.sol";
+// UMA's tokens are built on OpenZeppelin 4 (pinned by @uma/core), so they are not the
+// OpenZeppelin 5 IERC20 that SafeERC20 takes. Named imports keep the two versions apart,
+// and each token is cast to IERC20 by address before a SafeERC20 call.
+import {ExpandedERC20} from "@uma/core/contracts/common/implementation/ExpandedERC20.sol";
+import {ExpandedIERC20} from "@uma/core/contracts/common/interfaces/ExpandedIERC20.sol";
 
 interface IEventBasedPredictionMarket {
     function collateralToken() external view returns (ExpandedERC20);
@@ -19,8 +24,7 @@ interface IEventBasedPredictionMarket {
 }
 
 contract PredictionMarketAMM is ReentrancyGuard {
-    using SafeERC20 for ExpandedERC20;
-    using SafeERC20 for ExpandedIERC20;
+    using SafeERC20 for IERC20;
 
     IEventBasedPredictionMarket public market;
     ExpandedERC20 public collateralToken;
@@ -64,7 +68,7 @@ contract PredictionMarketAMM is ReentrancyGuard {
         initialized = true;
 
         // Pull USDC from caller
-        collateralToken.safeTransferFrom(msg.sender, address(this), _initialLiquidity);
+        IERC20(address(collateralToken)).safeTransferFrom(msg.sender, address(this), _initialLiquidity);
 
         // Approve USDC to market and mint pairs
         collateralToken.approve(address(market), type(uint256).max);
@@ -103,7 +107,7 @@ contract PredictionMarketAMM is ReentrancyGuard {
         uint256 kBefore = reserveYes * reserveNo;
 
         // Pull USDC from user and mint Yes+No pairs
-        collateralToken.safeTransferFrom(msg.sender, address(this), usdcAmount);
+        IERC20(address(collateralToken)).safeTransferFrom(msg.sender, address(this), usdcAmount);
         market.create(usdcAmount);
 
         // Total Yes out = the minted Yes + Yes swapped out of the pool for the No it gains.
@@ -115,7 +119,7 @@ contract PredictionMarketAMM is ReentrancyGuard {
         reserveNo += usdcAmount; // full amount; the fee stays in the pool as extra reserve
         require(reserveYes * reserveNo >= kBefore, "Invariant broken");
 
-        longToken.safeTransfer(msg.sender, yesOut);
+        IERC20(address(longToken)).safeTransfer(msg.sender, yesOut);
 
         emit BuyYes(msg.sender, usdcAmount, yesOut);
     }
@@ -129,7 +133,7 @@ contract PredictionMarketAMM is ReentrancyGuard {
         require(usdcAmount > 0, "Zero amount");
         uint256 kBefore = reserveYes * reserveNo;
 
-        collateralToken.safeTransferFrom(msg.sender, address(this), usdcAmount);
+        IERC20(address(collateralToken)).safeTransferFrom(msg.sender, address(this), usdcAmount);
         market.create(usdcAmount);
 
         uint256 swapNoOut = _swapOut(usdcAmount, reserveYes, reserveNo);
@@ -140,7 +144,7 @@ contract PredictionMarketAMM is ReentrancyGuard {
         reserveYes += usdcAmount;
         require(reserveYes * reserveNo >= kBefore, "Invariant broken");
 
-        shortToken.safeTransfer(msg.sender, noOut);
+        IERC20(address(shortToken)).safeTransfer(msg.sender, noOut);
 
         emit BuyNo(msg.sender, usdcAmount, noOut);
     }
@@ -156,7 +160,7 @@ contract PredictionMarketAMM is ReentrancyGuard {
         require(yesAmount > 0, "Zero amount");
         uint256 kBefore = reserveYes * reserveNo;
 
-        longToken.safeTransferFrom(msg.sender, address(this), yesAmount);
+        IERC20(address(longToken)).safeTransferFrom(msg.sender, address(this), yesAmount);
 
         usdcOut = _sellQuote(yesAmount, reserveYes, reserveNo);
         require(usdcOut > 0, "Amount too small");
@@ -168,7 +172,7 @@ contract PredictionMarketAMM is ReentrancyGuard {
         require(reserveYes * reserveNo >= kBefore, "Invariant broken");
 
         market.redeem(usdcOut);
-        collateralToken.safeTransfer(msg.sender, usdcOut);
+        IERC20(address(collateralToken)).safeTransfer(msg.sender, usdcOut);
 
         emit SellYes(msg.sender, yesAmount, usdcOut);
     }
@@ -182,7 +186,7 @@ contract PredictionMarketAMM is ReentrancyGuard {
         require(noAmount > 0, "Zero amount");
         uint256 kBefore = reserveYes * reserveNo;
 
-        shortToken.safeTransferFrom(msg.sender, address(this), noAmount);
+        IERC20(address(shortToken)).safeTransferFrom(msg.sender, address(this), noAmount);
 
         usdcOut = _sellQuote(noAmount, reserveNo, reserveYes);
         require(usdcOut > 0, "Amount too small");
@@ -193,7 +197,7 @@ contract PredictionMarketAMM is ReentrancyGuard {
         require(reserveYes * reserveNo >= kBefore, "Invariant broken");
 
         market.redeem(usdcOut);
-        collateralToken.safeTransfer(msg.sender, usdcOut);
+        IERC20(address(collateralToken)).safeTransfer(msg.sender, usdcOut);
 
         emit SellNo(msg.sender, noAmount, usdcOut);
     }
@@ -218,7 +222,7 @@ contract PredictionMarketAMM is ReentrancyGuard {
         }
 
         collateralOut = collateralToken.balanceOf(address(this));
-        if (collateralOut > 0) collateralToken.safeTransfer(msg.sender, collateralOut);
+        if (collateralOut > 0) IERC20(address(collateralToken)).safeTransfer(msg.sender, collateralOut);
 
         emit LiquidityWithdrawn(msg.sender, collateralOut);
     }
@@ -295,7 +299,7 @@ contract PredictionMarketAMM is ReentrancyGuard {
         uint256 effective = (amountIn * (10000 - feeBps)) / 10000;
         uint256 s = reserveSell + effective + reserveOther;
         uint256 discriminant = s * s - 4 * effective * reserveOther;
-        uint256 root = Math.sqrt(discriminant, Math.Rounding.Up);
+        uint256 root = Math.sqrt(discriminant, Math.Rounding.Ceil);
         if (root >= s) return 0;
         uint256 out = (s - root) / 2;
         return out >= reserveOther ? reserveOther - 1 : out;

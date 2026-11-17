@@ -1,15 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "@uma/core/contracts/common/implementation/ExpandedERC20.sol";
-import "@uma/core/contracts/common/implementation/Testable.sol";
-import "@uma/core/contracts/common/implementation/AddressWhitelist.sol";
-import "@uma/core/contracts/data-verification-mechanism/implementation/Constants.sol";
+// UMA's contracts are built on OpenZeppelin 4 (pinned by @uma/core), so its tokens are not the
+// OpenZeppelin 5 IERC20 that SafeERC20 takes. Named imports keep the two versions apart,
+// and the collateral is cast to IERC20 by address before a SafeERC20 call.
+import {ExpandedERC20} from "@uma/core/contracts/common/implementation/ExpandedERC20.sol";
+import {ExpandedIERC20} from "@uma/core/contracts/common/interfaces/ExpandedIERC20.sol";
+import {Testable} from "@uma/core/contracts/common/implementation/Testable.sol";
+import {AddressWhitelist} from "@uma/core/contracts/common/implementation/AddressWhitelist.sol";
+import {OracleInterfaces} from "@uma/core/contracts/data-verification-mechanism/implementation/Constants.sol";
+import {FinderInterface} from "@uma/core/contracts/data-verification-mechanism/interfaces/FinderInterface.sol";
 
-import "@uma/core/contracts/optimistic-oracle-v2/interfaces/OptimisticOracleV2Interface.sol";
-import "@uma/core/contracts/data-verification-mechanism/interfaces/IdentifierWhitelistInterface.sol";
+import {OptimisticOracleV2Interface} from "@uma/core/contracts/optimistic-oracle-v2/interfaces/OptimisticOracleV2Interface.sol";
+import {IdentifierWhitelistInterface} from "@uma/core/contracts/data-verification-mechanism/interfaces/IdentifierWhitelistInterface.sol";
 
 /**
  * @title EventBasedPredictionMarket
@@ -29,7 +35,7 @@ import "@uma/core/contracts/data-verification-mechanism/interfaces/IdentifierWhi
  *   - 5e17 (Undetermined): Each token worth 0.5 collateral.
  */
 contract EventBasedPredictionMarket is Testable {
-    using SafeERC20 for ExpandedERC20;
+    using SafeERC20 for IERC20;
 
     /***************************************************
      *  EVENT BASED PREDICTION MARKET DATA STRUCTURES  *
@@ -132,7 +138,7 @@ contract EventBasedPredictionMarket is Testable {
         require(!priceRequested, "Already initialized");
 
         if (proposerReward > 0) {
-            collateralToken.safeTransferFrom(msg.sender, address(this), proposerReward);
+            IERC20(address(collateralToken)).safeTransferFrom(msg.sender, address(this), proposerReward);
         }
 
         _requestOraclePrice();
@@ -211,7 +217,7 @@ contract EventBasedPredictionMarket is Testable {
      * @param tokensToCreate Number of token pairs to mint.
      */
     function create(uint256 tokensToCreate) public requestInitialized {
-        collateralToken.safeTransferFrom(msg.sender, address(this), tokensToCreate);
+        IERC20(address(collateralToken)).safeTransferFrom(msg.sender, address(this), tokensToCreate);
         require(longToken.mint(msg.sender, tokensToCreate));
         require(shortToken.mint(msg.sender, tokensToCreate));
         emit TokensCreated(msg.sender, tokensToCreate, tokensToCreate);
@@ -224,7 +230,7 @@ contract EventBasedPredictionMarket is Testable {
     function redeem(uint256 tokensToRedeem) public {
         require(longToken.burnFrom(msg.sender, tokensToRedeem));
         require(shortToken.burnFrom(msg.sender, tokensToRedeem));
-        collateralToken.safeTransfer(msg.sender, tokensToRedeem);
+        IERC20(address(collateralToken)).safeTransfer(msg.sender, tokensToRedeem);
         emit TokensRedeemed(msg.sender, tokensToRedeem, tokensToRedeem);
     }
 
@@ -247,7 +253,7 @@ contract EventBasedPredictionMarket is Testable {
         uint256 shortCollateralRedeemed = (shortTokensToRedeem * (1e18 - settlementPrice)) / 1e18;
 
         collateralReturned = longCollateralRedeemed + shortCollateralRedeemed;
-        collateralToken.safeTransfer(msg.sender, collateralReturned);
+        IERC20(address(collateralToken)).safeTransfer(msg.sender, collateralReturned);
 
         emit PositionSettled(msg.sender, collateralReturned, longTokensToRedeem, shortTokensToRedeem);
     }
@@ -262,7 +268,7 @@ contract EventBasedPredictionMarket is Testable {
     function _requestOraclePrice() internal {
         OptimisticOracleV2Interface optimisticOracle = getOptimisticOracle();
 
-        collateralToken.safeApprove(address(optimisticOracle), proposerReward);
+        IERC20(address(collateralToken)).forceApprove(address(optimisticOracle), proposerReward);
 
         optimisticOracle.requestPrice(
             priceIdentifier,
