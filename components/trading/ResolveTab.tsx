@@ -44,7 +44,6 @@ interface ResolveTabProps {
   proposePrice: TxStatusProps & { propose: (price: bigint) => void };
   disputePrice: TxStatusProps & { dispute: () => void };
   settleOracle: TxStatusProps & { settleOracle: () => void };
-  settleOracleWithTimer: TxStatusProps & { settleOracle: () => void };
   isOracleSettlementRefreshing: boolean;
   settlePos: TxStatusProps & { settle: (longAmt: bigint, shortAmt: bigint) => void };
 }
@@ -66,42 +65,33 @@ export function ResolveTab({
   proposePrice,
   disputePrice,
   settleOracle,
-  settleOracleWithTimer,
   isOracleSettlementRefreshing,
   settlePos,
 }: ResolveTabProps) {
   const [longSettleAmt, setLongSettleAmt] = useState("");
   const [shortSettleAmt, setShortSettleAmt] = useState("");
-  const [disputeEscalated, setDisputeEscalated] = useState(false);
-
-  useEffect(() => {
-    if (proposePrice.isSuccess) setDisputeEscalated(false);
-  }, [proposePrice.isSuccess]);
-
-  useEffect(() => {
-    if (disputePrice.isSuccess) setDisputeEscalated(true);
-  }, [disputePrice.isSuccess]);
-
-  // Once the user sees "Disputed", freeze the display there until they
-  // leave/reload. Prevents the Disputed → Unknown → No Proposal Yet blink.
+  // Once the user sees "Disputed", keep the label until they leave/reload: the dispute
+  // callback re-requests the price right away, so the state jumps to "No Proposal Yet".
+  // Recorded during render (not in an effect) so it never shows a stale frame.
   const [disputeSticky, setDisputeSticky] = useState(false);
-  useEffect(() => {
-    if (oracleState === OracleState.Disputed) setDisputeSticky(true);
-  }, [oracleState]);
+  if (oracleState === OracleState.Disputed && !disputeSticky) setDisputeSticky(true);
 
   const displayOracleState = disputeSticky && oracleState !== OracleState.Proposed && oracleState !== OracleState.Expired && oracleState !== OracleState.Resolved && oracleState !== OracleState.Settled
     ? OracleState.Disputed
     : oracleState;
 
-  useEffect(() => {
+  // Clear the amounts once a settlement goes through (adjusted during render, not in an effect).
+  const [settleSucceeded, setSettleSucceeded] = useState(settlePos.isSuccess);
+  if (settlePos.isSuccess !== settleSucceeded) {
+    setSettleSucceeded(settlePos.isSuccess);
     if (settlePos.isSuccess) {
       setLongSettleAmt("");
       setShortSettleAmt("");
     }
-  }, [settlePos.isSuccess]);
+  }
 
   // Countdown for proposal expiration
-  const [now, setNow] = useState(Math.floor(Date.now() / 1000));
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return () => clearInterval(interval);
@@ -115,10 +105,6 @@ export function ResolveTab({
     settleOracle.isPending ||
     settleOracle.isConfirming ||
     isOracleSettlementRefreshing;
-  const isSettleOracleWithTimerBusy =
-    settleOracleWithTimer.isPending ||
-    settleOracleWithTimer.isConfirming ||
-    isOracleSettlementRefreshing;
 
   return (
     <div className="space-y-4">
@@ -131,7 +117,7 @@ export function ResolveTab({
       </div>
 
       {/* Phase 1: Awaiting proposal */}
-      {(oracleState === OracleState.Requested || oracleState === OracleState.Disputed || (oracleState === OracleState.Invalid && priceRequested) || (disputeEscalated && disputePrice.isSuccess)) && (
+      {(oracleState === OracleState.Requested || oracleState === OracleState.Disputed || (oracleState === OracleState.Invalid && priceRequested)) && (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
             No one has proposed a resolution yet. Propose YES (1e18), NO (0), or Undetermined (5e17).
@@ -181,7 +167,9 @@ export function ResolveTab({
                   Undetermined
                 </Button>
               </div>
-              <TxStatus {...proposePrice} />
+              {/* A successful proposal moves on to phase 2. If phase 1 is back, that proposal was
+                  disputed, so show the dispute's result rather than a stale "Success". */}
+              <TxStatus {...(proposePrice.isSuccess ? disputePrice : proposePrice)} />
             </>
           )}
         </div>
@@ -203,9 +191,9 @@ export function ResolveTab({
             <p className="text-xs text-muted-foreground">
               by {proposer ? `${proposer.slice(0, 6)}...${proposer.slice(-4)}` : "..."}
             </p>
-            {expirationDisplay && (
+            {expirationSeconds !== undefined && (
               <p className="text-xs text-yellow-500 font-mono">
-                Dispute window: {expirationDisplay}
+                {expirationDisplay ? `Dispute window: ${expirationDisplay}` : "Dispute window closing..."}
               </p>
             )}
           </div>
@@ -225,26 +213,6 @@ export function ResolveTab({
               </Button>
               <TxStatus {...approveArctForOO} />
             </>
-          ) : expirationSeconds !== undefined && expirationSeconds <= 0 ? (
-            <>
-              <Button
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                onClick={() => settleOracleWithTimer.settleOracle()}
-                disabled={isSettleOracleWithTimerBusy}
-              >
-                {isSettleOracleWithTimerBusy
-                  ? isOracleSettlementRefreshing
-                    ? "Finalizing Oracle..."
-                    : "Settling Oracle..."
-                  : "Settle Oracle Request"}
-              </Button>
-              <TxStatus {...settleOracleWithTimer} />
-              {isOracleSettlementRefreshing && (
-                <p className="text-xs text-blue-500">
-                  Refreshing oracle state until settlement is fully reflected in the UI...
-                </p>
-              )}
-            </>
           ) : (
             <>
               <Button
@@ -255,7 +223,8 @@ export function ResolveTab({
               >
                 {disputePrice.isPending || disputePrice.isConfirming ? "Disputing..." : "Dispute"}
               </Button>
-              <TxStatus {...disputePrice} />
+              {/* After a dispute, the market asks again: a "Success" here would be the old dispute. */}
+              {!disputePrice.isSuccess && <TxStatus {...disputePrice} />}
             </>
           )}
         </div>

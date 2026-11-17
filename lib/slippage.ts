@@ -30,3 +30,13 @@ export function minAfterSlippage(quote: bigint, bps: bigint = DEFAULT_SLIPPAGE_B
   if (bps < BigInt(0) || bps > BPS) throw new Error("Slippage must be between 0 and 10000 bps");
   return (quote * (BPS - bps)) / BPS;
 }
+
+/**
+ * How far a trade's average price is from the pool's spot price, in percent. Both prices are
+ * in ARCT per outcome token (0 to 1). The 2% swap fee is part of the average price, so a tiny
+ * trade shows about 2%.
+ */
+export function priceImpactPercent(avgPrice: number, spotPrice: number | undefined): number | undefined {
+  if (spotPrice === undefined || !(spotPrice > 0) || !Number.isFinite(avgPrice)) return undefined;
+  return Math.abs((avgPrice - spotPrice) / spotPrice) * 100;
+}

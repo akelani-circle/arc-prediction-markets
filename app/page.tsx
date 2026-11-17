@@ -18,34 +18,20 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { MarketCard } from "@/components/MarketCard";
 import { CreateMarketDialog } from "@/components/CreateMarketDialog";
-import { MARKETS, type MarketCardData, type DynamicMarket, dynamicToCardData } from "@/lib/markets";
+import { MARKETS, MARKET_CATEGORIES, dynamicToCardData } from "@/lib/markets";
+import { useDynamicMarkets } from "@/hooks/useDynamicMarkets";
 
-const CATEGORIES = ["All", "Crypto", "Economy", "Equities", "Commodities", "Geopolitics"];
+const CATEGORIES = ["All", ...MARKET_CATEGORIES];
 
 export default function Home() {
   const [activeCategory, setActiveCategory] = useState("All");
-  const [dynamicMarkets, setDynamicMarkets] = useState<MarketCardData[]>([]);
+  // A failed fetch just shows the built-in markets.
+  const { data: dynamicMarkets, refetch } = useDynamicMarkets();
 
-  const fetchDynamicMarkets = useCallback(async () => {
-    try {
-      const res = await fetch("/api/markets");
-      if (res.ok) {
-        const data: DynamicMarket[] = await res.json();
-        setDynamicMarkets(data.map(dynamicToCardData));
-      }
-    } catch {
-      // silently fail
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchDynamicMarkets();
-  }, [fetchDynamicMarkets]);
-
-  const allMarkets = [...dynamicMarkets, ...MARKETS];
+  const allMarkets = [...(dynamicMarkets ?? []).map(dynamicToCardData), ...MARKETS];
 
   const filtered =
     activeCategory === "All"
@@ -78,7 +64,7 @@ export default function Home() {
         </div>
 
         <div className="shrink-0 ml-auto">
-          <CreateMarketDialog onCreated={fetchDynamicMarkets} />
+          <CreateMarketDialog onCreated={() => refetch()} />
         </div>
       </div>
 

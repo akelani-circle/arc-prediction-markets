@@ -19,7 +19,7 @@
 "use client";
 
 import { useReadContracts } from "wagmi";
-import { type Address, formatUnits } from "viem";
+import { type Address, formatUnits, hexToString } from "viem";
 import { MARKET_ABI } from "@/lib/contracts/abis/market";
 import { ERC20_ABI } from "@/lib/contracts/abis/erc20";
 import { AMM_ABI } from "@/lib/contracts/abis/amm";
@@ -32,6 +32,7 @@ export function useMarketCardData(marketAddress: Address, ammAddress: Address | 
       { address: marketAddress, abi: MARKET_ABI, functionName: "receivedSettlementPrice" },
       { address: marketAddress, abi: MARKET_ABI, functionName: "settlementPrice" },
       { address: marketAddress, abi: MARKET_ABI, functionName: "longToken" },
+      { address: marketAddress, abi: MARKET_ABI, functionName: "customAncillaryData" },
     ],
     query: {
       enabled,
@@ -44,6 +45,17 @@ export function useMarketCardData(marketAddress: Address, ammAddress: Address | 
   const receivedSettlementPrice = data?.[1]?.result as boolean | undefined;
   const settlementPrice = data?.[2]?.result as bigint | undefined;
   const longTokenAddress = data?.[3]?.result as Address | undefined;
+  const ancillaryDataHex = data?.[4]?.result as `0x${string}` | undefined;
+
+  // The question the oracle resolves, so the card always says what the market really asks.
+  let question: string | undefined;
+  if (ancillaryDataHex) {
+    try {
+      question = hexToString(ancillaryDataHex);
+    } catch {
+      question = undefined;
+    }
+  }
 
   const { data: supplyData } = useReadContracts({
     contracts: [
@@ -106,5 +118,5 @@ export function useMarketCardData(marketAddress: Address, ammAddress: Address | 
     else settlementOutcome = "Undetermined";
   }
 
-  return { status, volume, settlementOutcome, ammYesPrice, isLoading };
+  return { status, volume, settlementOutcome, ammYesPrice, question, isLoading };
 }

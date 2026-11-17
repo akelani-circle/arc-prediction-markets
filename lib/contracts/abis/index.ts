@@ -20,4 +20,3 @@ export { ERC20_ABI, TESTNET_ERC20_ABI } from "./erc20";
 export { MARKET_ABI } from "./market";
 export { OO_V2_ABI } from "./oracle";
 export { AMM_ABI } from "./amm";
-export { TIMER_ABI } from "./timer";

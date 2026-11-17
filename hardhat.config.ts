@@ -46,7 +46,7 @@ export default defineConfig({
   networks: {
     arcTestnet: {
       type: "http",
-      url: process.env.NEXT_PUBLIC_ALCHEMY_RPC_URL || "https://rpc.testnet.arc.network",
+      url: process.env.NEXT_PUBLIC_ALCHEMY_RPC_URL || "https://rpc.testnet.arc.io",
       accounts,
       chainId: 5042002,
     },
@@ -62,8 +62,8 @@ export default defineConfig({
       blockExplorers: {
         etherscan: {
           name: "ArcScan",
-          url: "https://testnet.arcscan.app",
-          apiUrl: "https://testnet.arcscan.app/api",
+          url: "https://explorer.testnet.arc.io",
+          apiUrl: "https://explorer.testnet.arc.io/api",
         },
       },
     },

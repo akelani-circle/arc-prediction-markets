@@ -27,12 +27,14 @@ import {
   type Address,
   type Hex,
   stringToHex,
+  zeroAddress,
 } from "viem";
 import { privateKeyToAccount, nonceManager } from "viem/accounts";
 import { arcTestnet } from "@/lib/chain";
+import type { MarketCategory } from "@/lib/markets";
 
 // --- Config -----------------------------------------------------------
-import { validateTitle, pairNameFor } from "@/lib/server/market-title";
+import { validateTitle, validateCategory, pairNameFor } from "@/lib/server/market-title";
 import { createCreationGuard } from "@/lib/server/creation-guard";
 import { isAuthorizedToCreate } from "@/lib/server/bearer";
 import {
@@ -125,7 +127,7 @@ async function waitForTx(
 
 // --- Creation (called once the request has passed every control below) -------------
 
-async function createMarket(trimmedTitle: string) {
+async function createMarket(trimmedTitle: string, category: MarketCategory) {
   try {
     // Validate env vars
     const privateKey = process.env.PRIVATE_KEY?.trim();
@@ -135,9 +137,8 @@ async function createMarket(trimmedTitle: string) {
 
     const arctAddress = process.env.NEXT_PUBLIC_ARCT_ADDRESS as Address;
     const finderAddress = process.env.NEXT_PUBLIC_FINDER_ADDRESS as Address;
-    const timerAddress = process.env.NEXT_PUBLIC_TIMER_ADDRESS as Address;
 
-    if (!arctAddress || !finderAddress || !timerAddress) {
+    if (!arctAddress || !finderAddress) {
       return NextResponse.json(
         { error: "Server not configured: missing contract addresses. Run deploy script first." },
         { status: 500 }
@@ -153,7 +154,7 @@ async function createMarket(trimmedTitle: string) {
     // nonceManager to assign wrong nonces and transactions to hang indefinitely.
     const formattedKey = (privateKey.startsWith("0x") ? privateKey : `0x${privateKey}`) as Hex;
     const account = privateKeyToAccount(formattedKey, { nonceManager });
-    const rpcUrl = "https://rpc.testnet.arc.network";
+    const rpcUrl = "https://rpc.testnet.arc.io";
 
     const publicClient = createPublicClient({
       chain: arcTestnet,
@@ -207,7 +208,7 @@ async function createMarket(trimmedTitle: string) {
         arctAddress,
         customAncillaryData,
         finderAddress,
-        timerAddress,
+        zeroAddress, // no Timer: the market uses block time, like the oracle
         PROPOSER_REWARD,
         MARKET_LIVENESS,
         PROPOSER_BOND,
@@ -282,7 +283,7 @@ async function createMarket(trimmedTitle: string) {
       address: marketAddress,
       ammAddress: ammAddress,
       title: trimmedTitle,
-      category: "Crypto",
+      category,
       createdAt: new Date().toISOString(),
     };
     try {
@@ -325,7 +326,7 @@ const clientKey = (request: Request) =>
   request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "unknown";
 
 /**
- * POST /api/create-market  { title }
+ * POST /api/create-market  { title, category }
  *
  * Spends the SERVER's key to deploy two contracts, mint test tokens and seed a pool, so it is
  * not left open: an optional bearer token, strict input limits, a cap on the number of
@@ -340,6 +341,10 @@ export async function POST(request: Request) {
   const validation = validateTitle(body?.title);
   if (!validation.ok) {
     return NextResponse.json({ error: validation.error }, { status: 400 });
+  }
+  const categoryValidation = validateCategory(body?.category);
+  if (!categoryValidation.ok) {
+    return NextResponse.json({ error: categoryValidation.error }, { status: 400 });
   }
 
   if (readMarkets().length >= maxMarkets()) {
@@ -356,7 +361,7 @@ export async function POST(request: Request) {
 
   let response: NextResponse | undefined;
   try {
-    response = await createMarket(validation.title);
+    response = await createMarket(validation.title, categoryValidation.category);
     return response;
   } finally {
     permit.release(response?.status === 200 ? "created" : "failed");

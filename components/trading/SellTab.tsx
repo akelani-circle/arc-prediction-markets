@@ -25,6 +25,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCollateral } from "@/hooks/market/helpers";
 import { COLLATERAL_DECIMALS } from "@/lib/contracts";
+import { priceImpactPercent } from "@/lib/slippage";
 import { TxStatus, type TxStatusProps } from "./TxStatus";
 import { OutcomeSelector } from "./OutcomeSelector";
 
@@ -74,11 +75,8 @@ export function SellTab({
     const tokensSpent = parseFloat(amount);
     if (tokensSpent > 0) {
       avgPrice = received / tokensSpent;
-      const otherPrice = outcome === "yes" ? noPrice : yesPrice;
-      if (spotPrice !== undefined && spotPrice > 0 && otherPrice !== undefined && otherPrice > 0) {
-        const marginalRate = spotPrice / otherPrice;
-        priceImpact = Math.abs((avgPrice - marginalRate) / marginalRate) * 100;
-      }
+      // Spot prices are percentages; a token's spot value in ARCT is price / 100.
+      priceImpact = priceImpactPercent(avgPrice, spotPrice !== undefined ? spotPrice / 100 : undefined);
     }
   }
 
@@ -124,9 +122,8 @@ export function SellTab({
                   return;
                 }
                 const parsed = parseUnits(raw, COLLATERAL_DECIMALS);
-                const safeMax = selectedBalance > 1n ? selectedBalance - 1n : selectedBalance;
-                if (parsed > safeMax) {
-                  onAmountChange(formatUnits(safeMax, COLLATERAL_DECIMALS));
+                if (parsed > selectedBalance) {
+                  onAmountChange(formatUnits(selectedBalance, COLLATERAL_DECIMALS));
                 } else {
                   onAmountChange(raw);
                 }
@@ -135,10 +132,7 @@ export function SellTab({
             />
             <button
               className="mt-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => {
-                const safeMax = selectedBalance > 1n ? selectedBalance - 1n : selectedBalance;
-                onAmountChange(formatUnits(safeMax, COLLATERAL_DECIMALS));
-              }}
+              onClick={() => onAmountChange(formatUnits(selectedBalance, COLLATERAL_DECIMALS))}
             >
               Max
             </button>

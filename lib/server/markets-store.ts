@@ -28,9 +28,12 @@ export interface StoredMarket {
   createdAt: string;
 }
 
-/** The registry is a JSON file. Tests point MARKETS_FILE at a temporary one. */
+/**
+ * The registry is a JSON file written at runtime. It is gitignored, so creating a market
+ * never dirties the repo. Set MARKETS_FILE to keep it elsewhere (tests use a temporary one).
+ */
 export function marketsFilePath(): string {
-  return process.env.MARKETS_FILE ?? path.resolve(process.cwd(), "data", "markets.json");
+  return process.env.MARKETS_FILE ?? path.resolve(process.cwd(), "data", "markets.local.json");
 }
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
@@ -65,6 +68,7 @@ export function readMarkets(): StoredMarket[] {
  */
 export function writeMarkets(markets: StoredMarket[]): void {
   const file = marketsFilePath();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
   fs.writeFileSync(temp, JSON.stringify(markets, null, 2) + "\n");
   fs.renameSync(temp, file);

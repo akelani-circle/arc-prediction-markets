@@ -18,56 +18,31 @@
 
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { MarketDetail } from "@/components/MarketDetail";
 import { TradingPanel } from "@/components/TradingPanel";
-import { MARKET_ADDRESS, AMM_ADDRESS } from "@/lib/contracts";
-import { MARKETS, type DynamicMarket } from "@/lib/markets";
+import { MarketActions } from "@/components/MarketActions";
+import { MARKETS } from "@/lib/markets";
+import { useDynamicMarkets } from "@/hooks/useDynamicMarkets";
 import { MarketAddressProvider } from "@/contexts/MarketAddressContext";
 import { type Address } from "viem";
 
 function useResolveMarket(address: string) {
-  const [resolved, setResolved] = useState<{
-    marketAddress: Address;
-    ammAddress: Address;
-  } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const sameAddress = (other: string) => other.toLowerCase() === address.toLowerCase();
 
-  useEffect(() => {
-    // Check static MARKETS first
-    const staticMatch = MARKETS.find(
-      (m) => m.address.toLowerCase() === address.toLowerCase() && m.isReal
-    );
-    if (staticMatch && staticMatch.ammAddress) {
-      setResolved({
-        marketAddress: staticMatch.address as Address,
-        ammAddress: staticMatch.ammAddress as Address,
-      });
-      setLoading(false);
-      return;
-    }
+  // Built-in markets resolve straight away; only user-created ones need the API.
+  const staticMatch = MARKETS.find((m) => m.isReal && m.ammAddress && sameAddress(m.address));
+  const { data: dynamicMarkets, isPending } = useDynamicMarkets({ enabled: !staticMatch });
+  const match = staticMatch ?? dynamicMarkets?.find((m) => sameAddress(m.address));
 
-    // Check dynamic markets
-    fetch("/api/markets")
-      .then((res) => res.json())
-      .then((markets: DynamicMarket[]) => {
-        const dynamicMatch = markets.find(
-          (m) => m.address.toLowerCase() === address.toLowerCase()
-        );
-        if (dynamicMatch) {
-          setResolved({
-            marketAddress: dynamicMatch.address as Address,
-            ammAddress: dynamicMatch.ammAddress as Address,
-          });
-        }
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [address]);
+  const resolved = match?.ammAddress
+    ? { marketAddress: match.address as Address, ammAddress: match.ammAddress as Address }
+    : null;
 
-  return { resolved, loading };
+  // A failed fetch ends loading and shows "Market not found", as before.
+  return { resolved, loading: !staticMatch && isPending };
 }
 
 export default function MarketPage({
@@ -107,7 +82,10 @@ export default function MarketPage({
           ammAddress={resolved.ammAddress}
         >
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-start">
-            <MarketDetail />
+            <div className="space-y-4">
+              <MarketDetail />
+              <MarketActions />
+            </div>
             <TradingPanel />
           </div>
         </MarketAddressProvider>

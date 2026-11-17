@@ -19,7 +19,7 @@
 import { type Chain, parseGwei } from "viem";
 
 export const ARC_TESTNET_RPC_URL =
-  process.env.NEXT_PUBLIC_ALCHEMY_RPC_URL || "https://rpc.testnet.arc.network";
+  process.env.NEXT_PUBLIC_ALCHEMY_RPC_URL || "https://rpc.testnet.arc.io";
 
 export const arcTestnet: Chain = {
   id: 5042002,
@@ -37,7 +37,7 @@ export const arcTestnet: Chain = {
   blockExplorers: {
     default: {
       name: "ArcScan",
-      url: "https://testnet.arcscan.app",
+      url: "https://explorer.testnet.arc.io",
     },
   },
   testnet: true,

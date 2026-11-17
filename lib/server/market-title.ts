@@ -16,6 +16,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { MARKET_CATEGORIES, type MarketCategory } from "@/lib/markets";
+
 export const MIN_TITLE_LENGTH = 5;
 export const MAX_TITLE_LENGTH = 140;
 
@@ -65,4 +67,14 @@ export function validateTitle(input: unknown): TitleResult {
 /** Token symbol suffix for the market's Yes/No pair: first 10 alphanumerics, upper-cased. */
 export function pairNameFor(title: string): string {
   return title.replace(/[^a-zA-Z0-9]/g, "").substring(0, 10).toUpperCase();
+}
+
+export type CategoryResult = { ok: true; category: MarketCategory } | { ok: false; error: string };
+
+/** The category must be one the home page can filter on, or the market would never show up. */
+export function validateCategory(input: unknown): CategoryResult {
+  const match = MARKET_CATEGORIES.find((category) => category === input);
+  return match
+    ? { ok: true, category: match }
+    : { ok: false, error: `Category must be one of: ${MARKET_CATEGORIES.join(", ")}` };
 }

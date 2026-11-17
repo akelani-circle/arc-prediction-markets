@@ -16,13 +16,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createPublicClient, http, parseGwei, type PublicClient } from "viem";
 import {
+  createPublicClient,
+  parseGwei,
+  type Client,
+  type CustomTransport,
+  type PublicClient,
+  type Transport,
+} from "viem";
+import {
+  getUserOperationGasPrice,
   toPasskeyTransport,
   toModularTransport,
 } from "@circle-fin/modular-wallets-core";
-import type { CustomTransport } from "viem";
-import { arcTestnet, ARC_TESTNET_RPC_URL } from "./chain";
+import { arcTestnet } from "./chain";
 
 const clientKey = process.env.NEXT_PUBLIC_CIRCLE_CLIENT_KEY ?? "";
 const clientUrl = process.env.NEXT_PUBLIC_CIRCLE_CLIENT_URL ?? "";
@@ -36,7 +43,6 @@ export function isCircleConfigured(): boolean {
 let _passkeyTransport: CustomTransport | null = null;
 let _modularTransport: CustomTransport | null = null;
 let _circlePublicClient: PublicClient | null = null;
-let _directPublicClient: PublicClient | null = null;
 
 function assertCircleConfigured(): void {
   if (!isCircleConfigured()) {
@@ -76,69 +82,31 @@ export function getCirclePublicClient(): PublicClient {
   return _circlePublicClient;
 }
 
-// Direct (non-bundler) RPC client — used for reading on-chain state like the
-// current block's baseFeePerGas without going through the Circle modular transport.
-export function getDirectPublicClient(): PublicClient {
-  if (!_directPublicClient) {
-    _directPublicClient = createPublicClient({
-      chain: arcTestnet,
-      transport: http(ARC_TESTNET_RPC_URL),
-    });
-  }
-  return _directPublicClient;
-}
-
 // --- UserOperation gas pricing ----------------------------------------
 //
-// Circle's bundler (Pimlico-compatible) rejects UserOps priced against the
-// wrong source — the network's eth_gasPrice and the bundler's required gas
-// price can diverge. Ask the bundler first via `pimlico_getUserOperationGasPrice`,
-// then fall back to `block.baseFeePerGas * 2 + MIN_PRIORITY_FEE` if that RPC
-// method isn't available.
+// Circle's bundler prices UserOperations with its own RPC method,
+// `circle_getUserOperationGasPrice`. It returns low / medium / high tiers.
+// A UserOp priced below what the bundler wants is accepted but never mined,
+// so there is no fallback: if the price can't be fetched, the send fails with
+// that error instead of hanging.
 
-const MIN_PRIORITY_FEE = parseGwei("1");
-// Last-resort base fee used only when a block is fetched but baseFeePerGas is
-// missing (non-EIP-1559 block shape). Not a ceiling — just a sentinel.
-const FALLBACK_BASE_FEE = parseGwei("48");
-
-interface PimlicoGasPriceTier {
-  maxFeePerGas: `0x${string}` | string;
-  maxPriorityFeePerGas: `0x${string}` | string;
-}
-
-interface PimlicoGasPrice {
-  slow?: PimlicoGasPriceTier;
-  standard?: PimlicoGasPriceTier;
-  fast?: PimlicoGasPriceTier;
-}
-
-interface BundlerRequester {
-  request: (args: { method: string }) => Promise<unknown>;
-}
+// The medium tier's tip sometimes dips to ~1.1 gwei for minutes at a time, and
+// Circle's bundler never mines a UserOp with that tip (it mines ~5 gwei ones).
+// So the tip never goes below this floor.
+export const MIN_PRIORITY_FEE_PER_GAS = parseGwei("5");
 
 export async function estimateUserOpFees({
   bundlerClient,
 }: {
-  bundlerClient: unknown;
+  bundlerClient: Client<Transport>;
 }): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }> {
-  const fees = (await (bundlerClient as BundlerRequester)
-    .request({ method: "pimlico_getUserOperationGasPrice" })
-    .catch(() => null)) as PimlicoGasPrice | null;
-
-  const tier = fees?.fast ?? fees?.standard ?? fees?.slow;
-  if (tier) {
-    const priority = BigInt(tier.maxPriorityFeePerGas);
-    return {
-      maxFeePerGas: BigInt(tier.maxFeePerGas),
-      maxPriorityFeePerGas:
-        priority < MIN_PRIORITY_FEE ? MIN_PRIORITY_FEE : priority,
-    };
-  }
-
-  const block = await getDirectPublicClient().getBlock();
-  const baseFee = block.baseFeePerGas ?? FALLBACK_BASE_FEE;
+  const { medium } = await getUserOperationGasPrice(bundlerClient);
+  const tierTip = BigInt(medium.maxPriorityFeePerGas);
+  const maxPriorityFeePerGas = tierTip > MIN_PRIORITY_FEE_PER_GAS ? tierTip : MIN_PRIORITY_FEE_PER_GAS;
+  // The tier's maxFeePerGas is its base fee estimate plus its tip: raise it by
+  // the same amount as the tip, so the base fee headroom stays the same.
   return {
-    maxFeePerGas: baseFee * 2n + MIN_PRIORITY_FEE,
-    maxPriorityFeePerGas: MIN_PRIORITY_FEE,
+    maxFeePerGas: BigInt(medium.maxFeePerGas) + (maxPriorityFeePerGas - tierTip),
+    maxPriorityFeePerGas,
   };
 }

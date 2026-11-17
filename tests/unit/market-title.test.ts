@@ -17,7 +17,14 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { MAX_TITLE_LENGTH, MIN_TITLE_LENGTH, pairNameFor, validateTitle } from "@/lib/server/market-title";
+import {
+  MAX_TITLE_LENGTH,
+  MIN_TITLE_LENGTH,
+  pairNameFor,
+  validateCategory,
+  validateTitle,
+} from "@/lib/server/market-title";
+import { MARKET_CATEGORIES } from "@/lib/markets";
 
 const ch = (code: number) => String.fromCharCode(code);
 const TAB = ch(9);
@@ -80,5 +87,21 @@ describe("pairNameFor", () => {
   it("uses the first ten alphanumerics, upper-cased", () => {
     expect(pairNameFor("Will BTC top $100k in 2026?")).toBe("WILLBTCTOP");
     expect(pairNameFor("a-b c")).toBe("ABC");
+  });
+});
+
+describe("validateCategory", () => {
+  it.each(MARKET_CATEGORIES)("accepts %s", (category) => {
+    expect(validateCategory(category)).toEqual({ ok: true, category });
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["unknown", "Sports"],
+    ["the wrong case", "crypto"],
+    ["the home page's All filter", "All"],
+    ["not a string", 1],
+  ])("rejects a category that is %s", (_name, value) => {
+    expect(validateCategory(value)).toEqual({ ok: false, error: expect.stringMatching(/^Category must be one of/) });
   });
 });

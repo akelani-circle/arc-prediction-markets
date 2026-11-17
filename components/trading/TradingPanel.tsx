@@ -18,8 +18,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
-import { parseUnits } from "viem";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@/contexts/WalletContext";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,12 +27,11 @@ import {
   useTokenBalances,
   useOracleState,
   useSettlePosition,
-  useProposePriceWithTimer,
+  useProposePrice,
   useDisputePrice,
   useSettleOracleRequest,
   useApproveArct,
   useOracleAllowance,
-  useSettleOracleWithTimer,
 } from "@/hooks/useMarket";
 import {
   useAMMState,
@@ -47,7 +45,7 @@ import {
   useApproveTokenForAMM,
   useAMMAllowances,
 } from "@/hooks/useAMM";
-import { COLLATERAL_DECIMALS, OO_V2_ADDRESS, OracleState } from "@/lib/contracts";
+import { OO_V2_ADDRESS, OracleState } from "@/lib/contracts";
 import { BuyTab } from "./BuyTab";
 import { SellTab } from "./SellTab";
 import { ResolveTab } from "./ResolveTab";
@@ -58,8 +56,9 @@ type Outcome = "yes" | "no";
 export function TradingPanel() {
   const { isConnected } = useWallet();
   const queryClient = useQueryClient();
-  const [mounted, setMounted] = useState(false);
-  const [tab, setTab] = useState<Tab>("buy");
+  // False during server rendering and hydration, true after: wallet state only exists in the browser.
+  const mounted = useSyncExternalStore(() => () => { }, () => true, () => false);
+  const [selectedTab, setTab] = useState<Tab>("buy");
   const [outcome, setOutcome] = useState<Outcome>("yes");
   const [amount, setAmount] = useState("");
 
@@ -110,21 +109,17 @@ export function TradingPanel() {
 
   // OO hooks
   const approveArctForOO = useApproveArct(OO_V2_ADDRESS);
-  const proposePrice = useProposePriceWithTimer(priceIdentifier, requestTimestamp, ancillaryDataHex);
+  const proposePrice = useProposePrice(priceIdentifier, requestTimestamp, ancillaryDataHex);
   const disputePrice = useDisputePrice(priceIdentifier, requestTimestamp, ancillaryDataHex);
   const settleOracle = useSettleOracleRequest(priceIdentifier, requestTimestamp, ancillaryDataHex);
-  const settleOracleWithTimer = useSettleOracleWithTimer(priceIdentifier, requestTimestamp, ancillaryDataHex);
+
+  // Trading stops once the market is settled, so the Resolve tab is the only one left.
+  const tab: Tab = receivedSettlementPrice ? "resolve" : selectedTab;
 
   // Preview calculations
   const { tokensOut: buyPreview } = useCalcBuy(outcome, tab === "buy" ? amount : "");
   const { collateralOut: sellPreview } = useCalcSell(outcome, tab === "sell" ? amount : "");
 
-  useEffect(() => setMounted(true), []);
-
-  // Auto-switch to resolve tab when market is settled
-  useEffect(() => {
-    if (receivedSettlementPrice) setTab("resolve");
-  }, [receivedSettlementPrice]);
 
   // Refetch allowances after approvals
   useEffect(() => {
@@ -139,8 +134,7 @@ export function TradingPanel() {
   // Refetch everything after trades, settle, oracle actions
   useEffect(() => {
     if (buyYes.isSuccess || buyNo.isSuccess || sellYesHook.isSuccess || sellNoHook.isSuccess ||
-      settlePos.isSuccess || proposePrice.isSuccess || disputePrice.isSuccess || settleOracle.isSuccess ||
-      settleOracleWithTimer.isSuccess) {
+      settlePos.isSuccess || proposePrice.isSuccess || disputePrice.isSuccess || settleOracle.isSuccess) {
       queryClient.invalidateQueries({ queryKey: ['readContracts'] });
       queryClient.invalidateQueries({ queryKey: ['readContract'] });
       refetchAMM();
@@ -151,11 +145,10 @@ export function TradingPanel() {
     }
   }, [buyYes.isSuccess, buyNo.isSuccess, sellYesHook.isSuccess, sellNoHook.isSuccess,
   settlePos.isSuccess, proposePrice.isSuccess, disputePrice.isSuccess, settleOracle.isSuccess,
-  settleOracleWithTimer.isSuccess,
     queryClient, refetchAMM, refetchAllowances, refetchBalances, refetchMarket, refetchOracle]);
 
   const isOracleSettlementRefreshing =
-    (settleOracle.isSuccess || settleOracleWithTimer.isSuccess) &&
+    settleOracle.isSuccess &&
     !receivedSettlementPrice &&
     oracleState !== OracleState.Settled;
 
@@ -171,10 +164,6 @@ export function TradingPanel() {
 
     return () => clearInterval(interval);
   }, [isOracleSettlementRefreshing, queryClient, refetchMarket, refetchOracle]);
-
-  const amountBigInt = amount
-    ? parseUnits(amount, COLLATERAL_DECIMALS)
-    : 0n;
 
   const needsBuyApproval =
     tab === "buy" && !approveArct.isSuccess && arctAllowance !== undefined &&
@@ -304,7 +293,6 @@ export function TradingPanel() {
             proposePrice={proposePrice}
             disputePrice={disputePrice}
             settleOracle={settleOracle}
-            settleOracleWithTimer={settleOracleWithTimer}
             isOracleSettlementRefreshing={isOracleSettlementRefreshing}
             settlePos={settlePos}
           />

@@ -23,6 +23,13 @@ typechain-types/
 out/
 build/
 
+# markets created at runtime by /api/create-market (see lib/server/markets-store.ts)
+data/markets.local.json*
+
+# agent instruction files that `next dev` writes into the project root
+/AGENTS.md
+/CLAUDE.md
+
 # misc
 .DS_Store
 *.pem

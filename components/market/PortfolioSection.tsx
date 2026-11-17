@@ -18,9 +18,7 @@
 
 "use client";
 
-import { formatUnits } from "viem";
-import { formatCollateral } from "@/hooks/market/helpers";
-import { COLLATERAL_DECIMALS } from "@/lib/contracts";
+import { formatCollateral, positionValues } from "@/hooks/market/helpers";
 
 interface PortfolioSectionProps {
   arctBalance: bigint | undefined;
@@ -28,6 +26,8 @@ interface PortfolioSectionProps {
   shortBalance: bigint | undefined;
   yesPrice: number | undefined;
   noPrice: number | undefined;
+  receivedSettlementPrice: boolean | undefined;
+  settlementPrice: bigint | undefined;
 }
 
 export function PortfolioSection({
@@ -36,13 +36,16 @@ export function PortfolioSection({
   shortBalance,
   yesPrice,
   noPrice,
+  receivedSettlementPrice,
+  settlementPrice,
 }: PortfolioSectionProps) {
-  const yesTokenValue = longBalance !== undefined && yesPrice !== undefined
-    ? parseFloat(formatUnits(longBalance, COLLATERAL_DECIMALS)) * (yesPrice / 100)
-    : undefined;
-  const noTokenValue = shortBalance !== undefined && noPrice !== undefined
-    ? parseFloat(formatUnits(shortBalance, COLLATERAL_DECIMALS)) * (noPrice / 100)
-    : undefined;
+  const { yes: yesTokenValue, no: noTokenValue } = positionValues({
+    longBalance,
+    shortBalance,
+    yesPrice,
+    noPrice,
+    settlementPrice: receivedSettlementPrice ? settlementPrice : undefined,
+  });
 
   return (
     <div className="rounded-xl border border-border bg-card p-6 space-y-3">

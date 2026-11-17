@@ -45,10 +45,9 @@ export function MarketStatusSection({
 
   // Once the user sees "Disputed", freeze the display there until they
   // leave/reload. Prevents the Disputed → Unknown → No Proposal Yet blink.
+  // Recorded during render (not in an effect) so it never shows a stale frame.
   const [disputeSticky, setDisputeSticky] = useState(false);
-  useEffect(() => {
-    if (oracleState === OracleState.Disputed) setDisputeSticky(true);
-  }, [oracleState]);
+  if (oracleState === OracleState.Disputed && !disputeSticky) setDisputeSticky(true);
 
   const displayState = disputeSticky && oracleState !== OracleState.Proposed && oracleState !== OracleState.Expired && oracleState !== OracleState.Resolved && oracleState !== OracleState.Settled
     ? OracleState.Disputed
@@ -121,7 +120,7 @@ export function MarketStatusSection({
           <p className="text-sm font-medium text-red-400">Dispute Submitted</p>
           <p className="text-xs text-muted-foreground mt-1">
             The proposed price was disputed. The dispute has been escalated to UMA&apos;s DVM for arbitration.
-            A new price request will be made once the DVM resolves.
+            The market has already requested a new price, so a new resolution can be proposed via the Resolve tab.
           </p>
         </div>
       )}

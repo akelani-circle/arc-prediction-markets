@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { COLLATERAL_DECIMALS } from "@/lib/contracts";
+import { priceImpactPercent } from "@/lib/slippage";
 import { TxStatus, type TxStatusProps } from "./TxStatus";
 import { OutcomeSelector } from "./OutcomeSelector";
 
@@ -67,9 +68,7 @@ export function BuyTab({
     const spent = parseFloat(amount);
     if (tokensReceived > 0) {
       avgPrice = spent / tokensReceived;
-      if (spotPrice !== undefined && spotPrice > 0) {
-        priceImpact = Math.abs((avgPrice - spotPrice / 100) / (spotPrice / 100)) * 100;
-      }
+      priceImpact = priceImpactPercent(avgPrice, spotPrice !== undefined ? spotPrice / 100 : undefined);
     }
   }
 

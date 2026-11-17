@@ -60,7 +60,8 @@ const post = (body: unknown, headers: Record<string, string> = {}, raw = false) 
     })
   );
 
-const validBody = { title: "Will ETH flip BTC by 2027?" };
+const validBody = { title: "Will ETH flip BTC by 2027?", category: "Crypto" };
+const withTitle = (title: string) => ({ ...validBody, title });
 
 /** Each request comes from a different client, so only the global controls apply. */
 let client = 0;
@@ -72,7 +73,6 @@ beforeEach(async () => {
   vi.stubEnv("PRIVATE_KEY", "0x" + "11".repeat(32));
   vi.stubEnv("NEXT_PUBLIC_ARCT_ADDRESS", "0x" + "01".repeat(20));
   vi.stubEnv("NEXT_PUBLIC_FINDER_ADDRESS", "0x" + "02".repeat(20));
-  vi.stubEnv("NEXT_PUBLIC_TIMER_ADDRESS", "0x" + "03".repeat(20));
   vi.stubEnv("CREATE_MARKET_TOKEN", "");
   Object.values(chain.publicClient).forEach((fn) => fn.mockReset());
   Object.values(chain.walletClient).forEach((fn) => fn.mockReset());
@@ -110,10 +110,13 @@ describe("POST /api/create-market — before anything is spent", () => {
   });
 
   it.each([
-    ["a missing title", {}],
-    ["a too-short title", { title: "hi" }],
-    ["an oversized title (the caller would choose the gas bill)", { title: "x".repeat(5000) }],
-    ["a non-string title", { title: 12345 }],
+    ["a missing title", { category: "Crypto" }],
+    ["a too-short title", withTitle("hi")],
+    ["an oversized title (the caller would choose the gas bill)", withTitle("x".repeat(5000))],
+    ["a non-string title", { ...validBody, title: 12345 }],
+    ["a missing category", { title: validBody.title }],
+    ["an unknown category", { ...validBody, category: "Sports" }],
+    ["a category with the wrong case", { ...validBody, category: "crypto" }],
   ])("rejects %s without touching the chain", async (_name, body) => {
     const res = await post(body, fromNewClient());
     expect(res.status).toBe(400);
@@ -137,12 +140,25 @@ describe("POST /api/create-market — before anything is spent", () => {
 
 describe("POST /api/create-market — creating", () => {
   it("deploys, then records the market with a normalised title", async () => {
-    const res = await post({ title: "  Will   ETH flip BTC   by 2027?  " }, fromNewClient());
+    const res = await post({ title: "  Will   ETH flip BTC   by 2027?  ", category: "Economy" }, fromNewClient());
 
     expect(res.status).toBe(200);
     const { market } = await res.json();
-    expect(market).toMatchObject({ address: MARKET, ammAddress: AMM, title: "Will ETH flip BTC by 2027?" });
+    expect(market).toMatchObject({
+      address: MARKET,
+      ammAddress: AMM,
+      title: "Will ETH flip BTC by 2027?",
+      category: "Economy",
+    });
     expect(store.writeMarkets).toHaveBeenCalledWith([expect.objectContaining({ address: MARKET, ammAddress: AMM })]);
+  });
+
+  it("deploys the market without a Timer, so it runs on block time like the oracle", async () => {
+    expect((await post(validBody, fromNewClient())).status).toBe(200);
+    const [marketDeploy] = chain.walletClient.deployContract.mock.calls[0];
+    // (pairName, collateral, question, finder, timer, reward, liveness, bond)
+    expect(marketDeploy.args[3]).toBe("0x" + "02".repeat(20));
+    expect(marketDeploy.args[4]).toBe("0x0000000000000000000000000000000000000000");
   });
 
   it("puts the new market first and keeps the existing ones", async () => {
@@ -198,7 +214,7 @@ describe("POST /api/create-market — limits", () => {
     const first = post(validBody, fromNewClient());
     await vi.waitFor(() => expect(chain.walletClient.deployContract).toHaveBeenCalled());
 
-    const second = await post({ title: "A second market at the same time" }, fromNewClient());
+    const second = await post(withTitle("A second market at the same time"), fromNewClient());
     expect(second.status).toBe(503);
     expect(second.headers.get("Retry-After")).toBeTruthy();
 
@@ -210,7 +226,7 @@ describe("POST /api/create-market — limits", () => {
   it("enforces a cooldown after a successful creation, with Retry-After", async () => {
     expect((await post(validBody, fromNewClient())).status).toBe(200);
 
-    const blocked = await post({ title: "Another market right after" }, fromNewClient());
+    const blocked = await post(withTitle("Another market right after"), fromNewClient());
     expect(blocked.status).toBe(429);
     expect(Number(blocked.headers.get("Retry-After"))).toBeGreaterThan(0);
     expect(chain.walletClient.deployContract).toHaveBeenCalledTimes(2); // only the first market's two contracts
@@ -227,7 +243,7 @@ describe("POST /api/create-market — limits", () => {
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ contractAddress: AMM })
       .mockResolvedValue({});
-    expect((await post({ title: "Retry after a failure" }, fromNewClient())).status).toBe(200);
+    expect((await post(withTitle("Retry after a failure"), fromNewClient())).status).toBe(200);
   });
 
   it("limits one client to a few creations per hour", async () => {
@@ -244,10 +260,10 @@ describe("POST /api/create-market — limits", () => {
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({ contractAddress: AMM })
         .mockResolvedValue({});
-      expect((await post({ title: "Market number " + i + " today" }, sameClient)).status).toBe(200);
+      expect((await post(withTitle("Market number " + i + " today"), sameClient)).status).toBe(200);
     }
 
-    const fourth = await post({ title: "A fourth market today" }, sameClient);
+    const fourth = await post(withTitle("A fourth market today"), sameClient);
     expect(fourth.status).toBe(429);
   });
 });
