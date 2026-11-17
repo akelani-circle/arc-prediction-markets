@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus } from "lucide-react";
 import { parseTxError } from "@/lib/errors";
+import { MARKET_CATEGORIES, type MarketCategory } from "@/lib/markets";
 
 interface CreateMarketDialogProps {
   onCreated: () => void;
@@ -40,6 +41,7 @@ interface CreateMarketDialogProps {
 export function CreateMarketDialog({ onCreated }: CreateMarketDialogProps) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
+  const [category, setCategory] = useState<MarketCategory>(MARKET_CATEGORIES[0]);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<{ title: string; detail?: string } | null>(null);
   const [step, setStep] = useState<string | null>(null);
@@ -55,7 +57,7 @@ export function CreateMarketDialog({ onCreated }: CreateMarketDialogProps) {
       const res = await fetch("/api/create-market", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim() }),
+        body: JSON.stringify({ title: title.trim(), category }),
       });
 
       const data = await res.json();
@@ -109,6 +111,29 @@ export function CreateMarketDialog({ onCreated }: CreateMarketDialogProps) {
                 if (e.key === "Enter" && title.trim() && !isCreating) handleCreate();
               }}
             />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              Category
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {MARKET_CATEGORIES.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setCategory(c)}
+                  disabled={isCreating}
+                  aria-pressed={category === c}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${category === c
+                    ? "bg-foreground text-background"
+                    : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                    }`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
           </div>
 
           {step && (

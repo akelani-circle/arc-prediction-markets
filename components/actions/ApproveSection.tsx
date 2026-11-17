@@ -18,17 +18,26 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { parseUnits } from "viem";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useApproveArct } from "@/hooks/useMarket";
-import { COLLATERAL_DECIMALS, MARKET_ADDRESS } from "@/lib/contracts";
+import { COLLATERAL_DECIMALS } from "@/lib/contracts";
+import { useMarketAddress } from "@/contexts/MarketAddressContext";
 import { ActionTxStatus } from "./ActionTxStatus";
 
 export function ApproveSection() {
   const [amount, setAmount] = useState("");
-  const { approve, isPending, isConfirming, isSuccess, error, hash } = useApproveArct(MARKET_ADDRESS);
+  // The market on this page, not the default one from .env.local.
+  const { marketAddress } = useMarketAddress();
+  const { approve, isPending, isConfirming, isSuccess, error, hash } = useApproveArct(marketAddress);
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (isSuccess) queryClient.invalidateQueries();
+  }, [isSuccess, queryClient]);
 
   return (
     <div className="space-y-3">

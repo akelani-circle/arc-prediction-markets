@@ -26,7 +26,7 @@ import { useMarketCardData } from "@/hooks/useMarket";
 import { type Address } from "viem";
 
 export function MarketCard({ market }: { market: MarketCardData }) {
-  const { status, volume, settlementOutcome, ammYesPrice, isLoading } = useMarketCardData(
+  const { status, volume, settlementOutcome, ammYesPrice, question, isLoading } = useMarketCardData(
     market.address as Address,
     market.ammAddress as Address | undefined,
     !!market.isReal
@@ -85,7 +85,7 @@ export function MarketCard({ market }: { market: MarketCardData }) {
             {market.icon}
           </div>
           <h3 className="text-sm font-medium leading-tight line-clamp-2">
-            {market.title}
+            {(market.isReal && question) || market.title}
           </h3>
         </div>
         <div className="shrink-0 flex flex-col items-center">

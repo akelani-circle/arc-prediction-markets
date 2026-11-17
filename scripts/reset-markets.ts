@@ -16,12 +16,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { writeFileSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// Same location as lib/server/markets-store.ts: MARKETS_FILE, or the gitignored runtime file.
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const marketsPath = resolve(__dirname, "../data/markets.json");
+const marketsPath = process.env.MARKETS_FILE ?? resolve(__dirname, "../data/markets.local.json");
 
-writeFileSync(marketsPath, "[]", "utf-8");
+rmSync(marketsPath, { force: true });
 console.log("All custom prediction markets have been wiped. The Bitcoin market is unaffected.");

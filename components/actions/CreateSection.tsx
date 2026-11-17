@@ -22,12 +22,13 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMarketState, useCreatePosition } from "@/hooks/useMarket";
+import { useMarketState, useTokenBalances, useCreatePosition, formatCollateral } from "@/hooks/useMarket";
 import { ActionTxStatus } from "./ActionTxStatus";
 
 export function CreateSection() {
   const [amount, setAmount] = useState("");
-  const { priceRequested } = useMarketState();
+  const { priceRequested, longTokenAddress, shortTokenAddress } = useMarketState();
+  const { arctAllowance } = useTokenBalances(longTokenAddress, shortTokenAddress);
   const { create, isPending, isConfirming, isSuccess, error, hash } = useCreatePosition();
   const queryClient = useQueryClient();
 
@@ -39,7 +40,7 @@ export function CreateSection() {
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
         Deposit ARCT to mint equal amounts of Long (YES) and Short (NO) tokens.
-        You must approve ARCT first.
+        You must approve ARCT first (approved: {formatCollateral(arctAllowance)} ARCT).
       </p>
       <div className="flex gap-2">
         <Input

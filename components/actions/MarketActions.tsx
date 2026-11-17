@@ -18,6 +18,7 @@
 
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWallet } from "@/contexts/WalletContext";
@@ -28,8 +29,11 @@ import { SettleSection } from "./SettleSection";
 
 export function MarketActions() {
   const { isConnected } = useWallet();
+  // False during server rendering and hydration, true after: wallet state only exists in the
+  // browser, so rendering it straight away would not match the server's HTML.
+  const mounted = useSyncExternalStore(() => () => { }, () => true, () => false);
 
-  if (!isConnected) return null;
+  if (!mounted || !isConnected) return null;
 
   return (
     <Card>

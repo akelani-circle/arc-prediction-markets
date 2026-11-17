@@ -18,6 +18,10 @@
 
 import { MARKET_ADDRESS, AMM_ADDRESS } from "./contracts";
 
+/** Categories a market can be filed under: the home page filters and the create dialog. */
+export const MARKET_CATEGORIES = ["Crypto", "Economy", "Equities", "Commodities", "Geopolitics"] as const;
+export type MarketCategory = (typeof MARKET_CATEGORIES)[number];
+
 export interface MarketCardData {
   id: string;
   address: string;

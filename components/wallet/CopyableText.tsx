@@ -29,9 +29,17 @@ export function CopyableText({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState("Copied!");
 
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(value);
+  const handleCopy = useCallback(async () => {
+    try {
+      // `navigator.clipboard` is missing outside secure contexts, and writes can be denied.
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(value);
+      setMessage("Copied!");
+    } catch {
+      setMessage("Copy failed");
+    }
     setOpen(true);
     setTimeout(() => setOpen(false), 1500);
   }, [value]);
@@ -45,7 +53,7 @@ export function CopyableText({
         {children}
       </PopoverTrigger>
       <PopoverContent className="w-auto px-3 py-1.5 text-xs font-medium">
-        Copied!
+        {message}
       </PopoverContent>
     </Popover>
   );

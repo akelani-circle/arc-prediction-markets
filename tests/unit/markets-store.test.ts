@@ -36,6 +36,7 @@ vi.mock("fs", async (importOriginal) => {
 import {
   DEFAULT_MAX_MARKETS,
   isStoredMarket,
+  marketsFilePath,
   maxMarkets,
   readMarkets,
   writeMarkets,
@@ -108,6 +109,18 @@ describe("markets store", () => {
     expect(to).toBe(file);
     expect(from).not.toBe(file);
     expect(from.startsWith(file)).toBe(true);
+  });
+
+  it("defaults to the gitignored runtime file, never the tracked data/markets.json", () => {
+    vi.stubEnv("MARKETS_FILE", undefined);
+    expect(marketsFilePath()).toBe(join(process.cwd(), "data", "markets.local.json"));
+  });
+
+  it("creates the folder of a configured file that does not exist yet", () => {
+    const nested = join(dir, "new", "dir", "markets.json");
+    vi.stubEnv("MARKETS_FILE", nested);
+    writeMarkets([market()]);
+    expect(readMarkets()).toHaveLength(1);
   });
 
   it("validates the shape of a market", () => {

@@ -44,7 +44,7 @@ export function TxStatus({
       <p className="text-xs text-green-500">
         Success!{" "}
         <a
-          href={`https://testnet.arcscan.app/tx/${hash}`}
+          href={`https://explorer.testnet.arc.io/tx/${hash}`}
           target="_blank"
           rel="noopener noreferrer"
           className="underline"

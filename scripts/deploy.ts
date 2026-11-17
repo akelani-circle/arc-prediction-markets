@@ -19,8 +19,8 @@
 import { network } from "hardhat";
 import { ethers } from "ethers";
 import { createRequire } from "module";
-import * as fs from "fs";
 import * as path from "path";
+import { writeEnvFile } from "./env-file.js";
 
 const require = createRequire(import.meta.url);
 const { ethers: hhEthers } = await network.getOrCreate();
@@ -35,7 +35,6 @@ function loadUmaArtifact(contractPath: string) {
 }
 
 const artifacts = {
-  Timer: loadUmaArtifact("common/implementation/Timer.sol/Timer.json"),
   Finder: loadUmaArtifact("data-verification-mechanism/implementation/Finder.sol/Finder.json"),
   IdentifierWhitelist: loadUmaArtifact("data-verification-mechanism/implementation/IdentifierWhitelist.sol/IdentifierWhitelist.json"),
   AddressWhitelist: loadUmaArtifact("common/implementation/AddressWhitelist.sol/AddressWhitelist.json"),
@@ -50,7 +49,7 @@ const artifacts = {
 const CONFIG = {
   // Market parameters
   pairName: "BTC100K",
-  question: "Will Bitcoin exceed $100,000 before June 1, 2026?",
+  question: "Bitcoin above $100,000 by end of 2026?",
 
   // Collateral token (TestnetERC20)
   tokenName: "Arc Test Token",
@@ -128,24 +127,6 @@ async function clearPendingTransactions(
   console.log("  All pending transactions cleared.\n");
 }
 
-function writeEnvFile(envPath: string, vars: Record<string, string>) {
-  const envContent: Record<string, string> = {};
-  if (fs.existsSync(envPath)) {
-    const existing = fs.readFileSync(envPath, "utf-8");
-    for (const line of existing.split("\n")) {
-      const match = line.match(/^([^#=]+)=(.*)$/);
-      if (match) {
-        envContent[match[1].trim()] = match[2].trim();
-      }
-    }
-  }
-  Object.assign(envContent, vars);
-  const output = Object.entries(envContent)
-    .map(([k, v]) => `${k}=${v}`)
-    .join("\n") + "\n";
-  fs.writeFileSync(envPath, output);
-}
-
 // --- Main -----------------------------------------------------------
 
 async function main() {
@@ -175,8 +156,10 @@ async function main() {
 
   console.log("Phase 1: Deploying UMA infrastructure...\n");
 
-  const timer = await deployFromArtifact("Timer", artifacts.Timer, [], deployer);
-  const timerAddr = await timer.getAddress();
+  // No UMA Timer: every contract below gets address(0), so it reads block.timestamp.
+  // A Timer is a single clock that anyone can set, shared by the oracle and every market,
+  // so anyone could jump past a proposal's dispute window. Arc's real block time is enough.
+  const timerAddr = ethers.ZeroAddress;
 
   const finder = await deployFromArtifact("Finder", artifacts.Finder, [], deployer);
   const finderAddr = await finder.getAddress();
@@ -306,7 +289,6 @@ async function main() {
     NEXT_PUBLIC_ARCT_ADDRESS: arctAddr,
     NEXT_PUBLIC_OO_V2_ADDRESS: ooV2Addr,
     NEXT_PUBLIC_FINDER_ADDRESS: finderAddr,
-    NEXT_PUBLIC_TIMER_ADDRESS: timerAddr,
     NEXT_PUBLIC_MOCK_ORACLE_ADDRESS: mockOracleAddr,
   });
 
@@ -314,7 +296,6 @@ async function main() {
 
   console.log("\n=== Deployment Summary ===\n");
   console.log("UMA Infrastructure:");
-  console.log(`  Timer:                ${timerAddr}`);
   console.log(`  Finder:               ${finderAddr}`);
   console.log(`  IdentifierWhitelist:  ${iwAddr}`);
   console.log(`  AddressWhitelist:     ${awAddr}`);

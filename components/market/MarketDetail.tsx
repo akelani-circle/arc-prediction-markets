@@ -96,6 +96,8 @@ export function MarketDetail() {
           shortBalance={shortBalance}
           yesPrice={yesPrice}
           noPrice={noPrice}
+          receivedSettlementPrice={receivedSettlementPrice}
+          settlementPrice={settlementPrice}
         />
       )}
     </div>

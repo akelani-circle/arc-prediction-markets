@@ -1,6 +1,6 @@
 # Arc Prediction Markets
 
-A prediction market platform built on [Arc Testnet](https://arc.network/) using [UMA's Optimistic Oracle V2](https://docs.uma.xyz/protocol-overview/how-does-umas-oracle-work) for trustless, decentralized resolution. Users connect a wallet, mint ARCT test tokens, deposit collateral to create Long (YES) and Short (NO) position tokens, and trade them through a built-in AMM. The platform ships with a live Bitcoin market and a grid of demo markets across Crypto, Economy, Equities, Commodities, and Geopolitics categories - and anyone can **create new custom markets on-chain** directly from the UI.
+A prediction market platform built on [Arc Testnet](https://arc.io/) using [UMA's Optimistic Oracle V2](https://docs.uma.xyz/protocol-overview/how-does-umas-oracle-work) for trustless, decentralized resolution. Users connect a wallet, mint ARCT test tokens, deposit collateral to create Long (YES) and Short (NO) position tokens, and trade them through a built-in AMM. The platform ships with a live Bitcoin market and a grid of demo markets across Crypto, Economy, Equities, Commodities, and Geopolitics categories - and anyone can **create new custom markets on-chain** directly from the UI.
 
 Resolution is handled by UMA's Optimistic Oracle V2: anyone can propose an outcome, and if no one disputes it within the liveness period, the market settles. Disputed proposals escalate to UMA's DVM (Data Verification Mechanism) for arbitration.
 
@@ -24,7 +24,7 @@ Since UMA's oracle infrastructure is not natively deployed on Arc Testnet, the d
 
 ## Prerequisites
 
-- **Node.js v20+** - Install via [nvm](https://github.com/nvm-sh/nvm)
+- **Node.js v22.13+** - Install via [nvm](https://github.com/nvm-sh/nvm) (required by Hardhat 3, which `npm run compile` and `npm run deploy` use)
 - **A wallet** - either:
   - **MetaMask** (or any injected EVM wallet) - connected to **Arc Testnet** (Chain ID `5042002`), or
   - **Circle Passkey Wallet** - browser-based biometric authentication via WebAuthn (no extension needed). Requires a [Circle developer account](https://console.circle.com/) for the client key and URL.
@@ -50,8 +50,8 @@ Since UMA's oracle infrastructure is not natively deployed on Arc Testnet, the d
 1. Clone the repository and install dependencies:
 
    ```bash
-   git clone git@github.com:akelani-circle/arc-prediction-market.git
-   cd arc-prediction-market
+   git clone git@github.com:circlefin/arc-prediction-markets.git
+   cd arc-prediction-markets
    npm install
    ```
 
@@ -61,7 +61,7 @@ Since UMA's oracle infrastructure is not natively deployed on Arc Testnet, the d
    cp .env.example .env.local
    ```
 
-   Edit `.env.local` and fill in your deployer private key and (optionally) Circle credentials (see [Environment Variables](#environment-variables)). The Arc Testnet RPC URL is pre-filled.
+   Edit `.env.local` and fill in your deployer private key and (optionally) your Circle client key (see [Environment Variables](#environment-variables)). The Circle client URL is pre-filled. `NEXT_PUBLIC_ALCHEMY_RPC_URL` is optional - leave it unset to use the public Arc Testnet RPC, or set your own Alchemy URL for better reliability.
 
    > **Note:** Deployment requires a **non-custodial wallet** (e.g. MetaMask) whose private key you can export. Custodial wallets like Circle passkey wallets do not expose private keys and cannot be used for deployment. The Circle wallet integration is for end users interacting with the deployed contracts via the frontend.
 
@@ -75,12 +75,12 @@ Since UMA's oracle infrastructure is not natively deployed on Arc Testnet, the d
    ```
 
    The deploy script:
-   1. Deploys the full UMA infrastructure (Timer, Finder, IdentifierWhitelist, AddressWhitelist, Store, TestnetERC20, MockOracleAncillary, OptimisticOracleV2)
+   1. Deploys the full UMA infrastructure (Finder, IdentifierWhitelist, AddressWhitelist, Store, TestnetERC20, MockOracleAncillary, OptimisticOracleV2)
    2. Wires the Finder, whitelists the `YES_OR_NO_QUERY` identifier and ARCT collateral
    3. Mints 100,000 ARCT to the deployer
    4. Deploys the EventBasedPredictionMarket and initializes it (requesting a price from the OO)
    5. Deploys the PredictionMarketAMM and seeds it with 1,000 ARCT
-   6. Writes all deployed addresses to `.env.local`
+   6. Writes all deployed addresses to `.env.local`, keeping its comments and other values
 
 4. Start the development server:
 
@@ -88,7 +88,7 @@ Since UMA's oracle infrastructure is not natively deployed on Arc Testnet, the d
    npm run dev
    ```
 
-   The app will be available at `http://localhost:3000`.
+   The app will be available at `http://localhost:3000` (`npm run dev -- -p <port>` picks another port). Open it as `localhost`, not `127.0.0.1`: the passkey wallet only works on a domain your Circle client key allows.
 
 ## How It Works
 
@@ -111,7 +111,6 @@ UMA's oracle infrastructure (Optimistic Oracle, Finder, DVM, etc.) is only deplo
 
 | Contract | Purpose |
 | --- | --- |
-| **Timer** | Testable time source for controlled testing |
 | **Finder** | Central registry - maps interface names to contract addresses |
 | **IdentifierWhitelist** | Whitelists supported price identifiers (e.g. `YES_OR_NO_QUERY`) |
 | **AddressWhitelist** | Whitelists approved collateral tokens |
@@ -119,6 +118,8 @@ UMA's oracle infrastructure (Optimistic Oracle, Finder, DVM, etc.) is only deplo
 | **TestnetERC20 (ARCT)** | Freely mintable 18-decimal token used as collateral and bond currency |
 | **MockOracleAncillary** | Testnet DVM substitute - admin can push prices for dispute resolution |
 | **OptimisticOracleV2** | The core oracle: request → propose → dispute → settle |
+
+No UMA `Timer` is deployed. The oracle and every market get `address(0)` as their timer, so they read `block.timestamp`. A `Timer` is one shared clock that anyone can set, which would let anyone skip a proposal's dispute window on every market at once.
 
 ### How resolution works
 
@@ -192,6 +193,8 @@ The `PredictionMarketAMM` contract sits on top of the prediction market and prov
 | 6 | **Settle Oracle** | After liveness, anyone calls `oo.settle()` to finalize |
 | 7 | **Settle Tokens** | Users burn tokens for ARCT based on the outcome |
 
+Besides trading through the AMM, a market page has an **Actions** card (once a wallet is connected) that talks to the market contract directly: **Approve** ARCT for the market, **Create** a Yes+No pair by depositing ARCT 1:1, **Redeem** equal Yes and No tokens back to ARCT at any time, and **Settle** tokens for ARCT once the market has resolved.
+
 **Settlement outcomes:**
 
 | Proposed Price | Long (YES) Value | Short (NO) Value |
@@ -205,11 +208,11 @@ The `PredictionMarketAMM` contract sits on top of the prediction market and prov
 In addition to the default Bitcoin market deployed by the deploy script, users can create new prediction markets directly from the UI:
 
 1. Click the **"Create Market"** button on the home page
-2. Enter a yes/no question (e.g., "Will ETH flip BTC by 2027?")
+2. Enter a yes/no question (e.g., "Will ETH flip BTC by 2027?") and pick its category
 3. The server-side API (`/api/create-market`) deploys a new `EventBasedPredictionMarket` and `PredictionMarketAMM` pair on-chain, initializes the market with the OO, and seeds the AMM with 1,000 ARCT of liquidity
-4. The new market appears in the grid and is fully tradeable
+4. The new market appears in the grid, under the category you picked, and is fully tradeable
 
-Custom markets are stored in `data/markets.json` and served via the `/api/markets` endpoint. To wipe all custom markets (the default Bitcoin market is unaffected):
+Custom markets are stored in `data/markets.local.json` (gitignored, created on first use; set `MARKETS_FILE` to keep it elsewhere) and served via the `/api/markets` endpoint. To wipe all custom markets (the default Bitcoin market is unaffected):
 
 ```bash
 npm run reset
@@ -224,7 +227,7 @@ All environment variables live in `.env.local`. The deploy script automatically 
 | Variable | Purpose |
 | --- | --- |
 | `PRIVATE_KEY` | Deployer wallet private key |
-| `NEXT_PUBLIC_ALCHEMY_RPC_URL` | Alchemy RPC URL (used by both Hardhat and the frontend) |
+| `NEXT_PUBLIC_ALCHEMY_RPC_URL` | Optional. Arc Testnet RPC URL, used by both Hardhat and the frontend. Unset, it falls back to the public `https://rpc.testnet.arc.io`; an Alchemy URL also works |
 | `CREATE_MARKET_TOKEN` | Optional. When set, `POST /api/create-market` requires `Authorization: Bearer <token>` |
 | `CREATE_MARKET_COOLDOWN_SECONDS` / `MAX_MARKETS` | Optional. Seconds between market creations (default 60) and the most markets to keep (default 100) |
 | `NEXT_PUBLIC_MARKET_ADDRESS` | Deployed EventBasedPredictionMarket address (auto-written) |
@@ -232,37 +235,38 @@ All environment variables live in `.env.local`. The deploy script automatically 
 | `NEXT_PUBLIC_ARCT_ADDRESS` | Deployed ARCT (TestnetERC20) address (auto-written) |
 | `NEXT_PUBLIC_OO_V2_ADDRESS` | Deployed OptimisticOracleV2 address (auto-written) |
 | `NEXT_PUBLIC_FINDER_ADDRESS` | Deployed Finder address (auto-written) |
-| `NEXT_PUBLIC_TIMER_ADDRESS` | Deployed Timer address (auto-written) |
 | `NEXT_PUBLIC_MOCK_ORACLE_ADDRESS` | Deployed MockOracleAncillary address (auto-written) |
-| `NEXT_PUBLIC_CIRCLE_CLIENT_KEY` | Circle modular wallets client key (for passkey wallet) |
-| `NEXT_PUBLIC_CIRCLE_CLIENT_URL` | Circle modular wallets API URL (for passkey wallet) |
+| `NEXT_PUBLIC_CIRCLE_CLIENT_KEY` | Circle modular wallets client key (for passkey wallet). Its allowed domains must include `localhost` |
+| `NEXT_PUBLIC_CIRCLE_CLIENT_URL` | Circle modular wallets API URL (for passkey wallet). Pre-filled with `https://modular-sdk.circle.com/v1/rpc/w3s/buidl` |
+| `MARKETS_FILE` | Optional. Where user-created markets are stored (default `data/markets.local.json`) |
 
 ## Testing
 
 - `npm test` runs the unit tests in `tests/unit` (no services needed).
-- `npm run test:contracts` runs the Solidity tests in `test/` on Hardhat's in-process network, covering the AMM's pricing, slippage limits, access control and recovery after resolution.
+- `npm run test:contracts` runs the Solidity tests in `test/` on Hardhat's in-process network, covering the AMM's pricing, slippage limits, access control and recovery after resolution, and the market's lifecycle on block time (propose, dispute, settle, redeem).
+- `npm run test:integration` runs the tests in `tests/integration` against Arc Testnet and Circle's bundler. They read `.env.local`, so run `npm run deploy` first. They only read: no transaction is sent and no funds are spent.
 
 ## Project Structure
 
 ```
-uma-prediction-market/
+arc-prediction-markets/
 ├── app/                                    # Next.js App Router pages
 │   ├── layout.tsx
 │   ├── page.tsx                            # Market grid with category filtering
-│   ├── market/[address]/page.tsx           # Individual market detail page
+│   ├── market/[address]/page.tsx           # Market page: detail, Actions card, trading panel
 │   ├── api/
 │   │   ├── create-market/route.ts          # POST - deploy new market + AMM on-chain
-│   │   └── markets/route.ts               # GET - list user-created markets
+│   │   └── markets/route.ts                # GET - list user-created markets
 │   ├── providers.tsx
 │   └── globals.css
 ├── components/                             # React components (modular subdirectories)
-│   ├── actions/                            # Market action components
+│   ├── actions/                            # Actions card on the market page
 │   │   ├── ActionTxStatus.tsx
-│   │   ├── ApproveSection.tsx              # Approve collateral spending
-│   │   ├── CreateSection.tsx               # Create Long/Short position tokens
+│   │   ├── ApproveSection.tsx              # Approve ARCT for the market
+│   │   ├── CreateSection.tsx               # Deposit ARCT to mint a Yes+No pair
 │   │   ├── MarketActions.tsx               # Approve/Create/Redeem/Settle tabs
-│   │   ├── RedeemSection.tsx               # Redeem tokens after settlement
-│   │   └── SettleSection.tsx               # Settle market via OO callback
+│   │   ├── RedeemSection.tsx               # Burn Yes+No pairs back to ARCT
+│   │   └── SettleSection.tsx               # Burn tokens for ARCT after resolution
 │   ├── market/                             # Market display components
 │   │   ├── MarketDetail.tsx                # Market detail with oracle status + portfolio
 │   │   ├── MarketHeader.tsx                # Market title and metadata header
@@ -279,33 +283,34 @@ uma-prediction-market/
 │   ├── wallet/                             # Wallet connection components
 │   │   ├── ConnectDialog.tsx               # Wallet selection dialog
 │   │   ├── ConnectWallet.tsx               # Wallet connect button + ARCT faucet
-│   │   └── CopyableText.tsx               # Click-to-copy address display
+│   │   └── CopyableText.tsx                # Click-to-copy address display
 │   ├── CreateMarketDialog.tsx              # Dialog to create custom on-chain markets
 │   ├── MarketCard.tsx                      # Market card for home page grid
-│   ├── MarketInfo.tsx                      # Compact market info card
 │   ├── Navbar.tsx
-│   ├── TokenBalances.tsx
+│   ├── ConnectWallet.tsx, MarketActions.tsx, MarketDetail.tsx, TradingPanel.tsx  # Re-exports
 │   └── ui/                                 # shadcn/ui primitives (button, card, dialog, tabs, etc.)
 ├── contracts/                              # Solidity smart contracts
 │   ├── EventBasedPredictionMarket.sol      # OO V2-integrated prediction market
-│   └── PredictionMarketAMM.sol             # Constant product AMM
+│   ├── PredictionMarketAMM.sol             # Constant product AMM
+│   └── test/                               # Mocks used by the contract tests
 ├── contexts/
-│   ├── WalletContext.tsx                    # Dual-wallet state (MetaMask + Circle passkey)
+│   ├── WalletContext.tsx                   # Dual-wallet state (MetaMask + Circle passkey)
 │   └── MarketAddressContext.tsx            # Per-market address provider for hooks
 ├── data/
-│   └── markets.json                        # User-created markets (managed by API)
+│   └── markets.local.json                  # User-created markets (written by the API, gitignored)
 ├── hooks/
 │   ├── useMarket.ts                        # Re-exports from hooks/market/
 │   ├── useAMM.ts                           # Re-exports from hooks/amm/
 │   ├── useContractWrite.ts                 # Unified write hook for both wallet types
+│   ├── useDynamicMarkets.ts                # Fetches user-created markets from /api/markets
 │   ├── amm/                                # AMM hook modules
 │   │   ├── useAMMApprovals.ts              # AMM token approval state & actions
 │   │   ├── useAMMCalc.ts                   # Preview calculations (calcBuy/calcSell)
 │   │   ├── useAMMState.ts                  # Reserves, prices, balances
 │   │   └── useAMMTrade.ts                  # Buy/sell execution
 │   └── market/                             # Market hook modules
-│       ├── helpers.ts                      # Shared formatting & parsing helpers
-│       ├── useMarketActions.ts             # Create positions, redeem, settle
+│       ├── helpers.ts                      # Shared formatting, oracle labels, position values
+│       ├── useMarketActions.ts             # Mint ARCT, approve, create/redeem pairs, settle tokens
 │       ├── useMarketCardData.ts            # Data for MarketCard grid display
 │       ├── useMarketState.ts               # Market parameters & settlement state
 │       ├── useOracleActions.ts             # OO propose/dispute/settle actions
@@ -320,17 +325,28 @@ uma-prediction-market/
 │   │       ├── amm.ts                      # PredictionMarketAMM ABI
 │   │       ├── erc20.ts                    # ERC20 / TestnetERC20 ABI
 │   │       ├── market.ts                   # EventBasedPredictionMarket ABI
-│   │       ├── oracle.ts                   # OptimisticOracleV2 ABI
-│   │       └── timer.ts                    # Timer ABI
-│   ├── circle.ts                           # Circle passkey transport & client helpers
+│   │       └── oracle.ts                   # OptimisticOracleV2 ABI
+│   ├── server/                             # Used by the API routes only
+│   │   ├── bearer.ts                       # Optional CREATE_MARKET_TOKEN check
+│   │   ├── creation-guard.ts               # One creation at a time + cooldown
+│   │   ├── market-title.ts                 # Title and category validation
+│   │   └── markets-store.ts                # Reads/writes the user-created markets file
+│   ├── chain.ts                            # Arc Testnet chain definition and RPC URL
+│   ├── circle.ts                           # Circle passkey transport, client and UserOp gas pricing
 │   ├── errors.ts                           # Error parsing & user-friendly messages
-│   ├── markets.ts                          # Static market grid (1 real + 11 demo) + types
-│   ├── wagmi.ts                            # Wagmi + Arc Testnet chain config
+│   ├── markets.ts                          # Static market grid (1 real + 11 demo), categories, types
+│   ├── slippage.ts                         # Slippage floor and price impact
+│   ├── wagmi.ts                            # Wagmi config
 │   └── utils.ts                            # Utility functions
 ├── public/                                 # Static assets
 ├── scripts/
 │   ├── deploy.ts                           # Deploys UMA infra + market + AMM, seeds liquidity
-│   └── reset-markets.ts                    # Wipes user-created markets from data/markets.json
+│   ├── env-file.ts                         # Writes addresses into .env.local, keeping comments
+│   └── reset-markets.ts                    # Deletes the user-created markets file
+├── test/                                   # Contract tests (npm run test:contracts)
+├── tests/
+│   ├── unit/                               # Unit tests (npm test)
+│   └── integration/                        # Arc Testnet + Circle tests (npm run test:integration)
 ├── components.json                         # shadcn/ui configuration
 ├── eslint.config.mjs                       # ESLint configuration
 ├── hardhat.config.ts                       # Arc Testnet network & compiler settings
@@ -338,6 +354,8 @@ uma-prediction-market/
 ├── package.json                            # All dependencies & scripts
 ├── postcss.config.mjs                      # PostCSS / Tailwind CSS configuration
 ├── tsconfig.json                           # TypeScript configuration
+├── vitest.config.mts                       # Unit test configuration
+├── vitest.integration.config.mts           # Integration test configuration
 └── .env.example                            # Environment variable template
 ```
 

@@ -44,3 +44,38 @@ export function oracleStateLabel(state: OracleState | undefined, opts?: { priceR
     default: return "Unknown";
   }
 }
+
+const WAD = BigInt("1000000000000000000");
+
+/**
+ * What the user's Yes and No tokens are worth, in ARCT. Once the market has resolved, a token
+ * pays out at the settlement price (YES = 1, NO = 0, Undetermined = 0.5), whatever the AMM's
+ * last price was. Before that, it is valued at the AMM price (a percentage, 0 to 100).
+ */
+export function positionValues({
+  longBalance,
+  shortBalance,
+  yesPrice,
+  noPrice,
+  settlementPrice,
+}: {
+  longBalance: bigint | undefined;
+  shortBalance: bigint | undefined;
+  yesPrice: number | undefined;
+  noPrice: number | undefined;
+  /** The market's settlement price (1e18 = YES), or undefined while it is unresolved. */
+  settlementPrice: bigint | undefined;
+}): { yes: number | undefined; no: number | undefined } {
+  const toArct = (amount: bigint) => parseFloat(formatUnits(amount, COLLATERAL_DECIMALS));
+
+  if (settlementPrice !== undefined) {
+    return {
+      yes: longBalance !== undefined ? toArct((longBalance * settlementPrice) / WAD) : undefined,
+      no: shortBalance !== undefined ? toArct((shortBalance * (WAD - settlementPrice)) / WAD) : undefined,
+    };
+  }
+  return {
+    yes: longBalance !== undefined && yesPrice !== undefined ? toArct(longBalance) * (yesPrice / 100) : undefined,
+    no: shortBalance !== undefined && noPrice !== undefined ? toArct(shortBalance) * (noPrice / 100) : undefined,
+  };
+}

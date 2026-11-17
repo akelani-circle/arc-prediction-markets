@@ -16,19 +16,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export const TIMER_ABI = [
-  {
-    inputs: [],
-    name: "getCurrentTime",
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [{ name: "time", type: "uint256" }],
-    name: "setCurrentTime",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-] as const;
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import type { DynamicMarket } from "@/lib/markets";
+
+async function fetchDynamicMarkets(): Promise<DynamicMarket[]> {
+  const res = await fetch("/api/markets");
+  if (!res.ok) throw new Error(`GET /api/markets failed: ${res.status}`);
+  return res.json();
+}
+
+/** Markets created through /api/create-market. Shared cache for the grid and the detail page. */
+export function useDynamicMarkets({ enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery({ queryKey: ["dynamic-markets"], queryFn: fetchDynamicMarkets, enabled });
+}
